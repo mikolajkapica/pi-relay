@@ -2,7 +2,7 @@ import cats.effect.*
 import cats.effect.std.Console
 import cats.implicits.*
 import com.comcast.ip4s.*
-import com.kubukoz.dualshock4s.{Dualshock, Keys}
+import com.kubukoz.dualshock4s.Dualshock
 import com.kubukoz.hid4s.*
 import fs2.{Pipe, Stream}
 import org.http4s.*
@@ -63,7 +63,7 @@ object Main extends IOApp {
     case DS4 extends DeviceInfo(0x54c, 0x9cc)
   }
 
-  private def hidapi(device: DeviceInfo) = Stream
+  private def hidapi(device: DeviceInfo): Stream[IO, BitVector] = Stream
     .resource(HID.instance[IO])
     .flatMap(_.getDevice(device.vendorId, device.productId).pipe(Stream.resource).pipe(retryExponentially))
     .flatMap(_.read(64))
@@ -74,11 +74,18 @@ object Main extends IOApp {
     val input = hidapi(device).metered(pollingRate)
 
     val loop: fs2.Pipe[IO, BitVector, String] =
-      _.map(Dualshock.codec.decode(_))
-        .map(_.toEither.map(_.value.keys).toOption.get)
-        .map((x: Keys) => s"l2=${x.l2.analog}, r2=${x.r2.analog}")
-        .changes
-        .debug()
+      _.map{ bytes =>
+        println(s"Processing started=${System.currentTimeMillis() / 1000}")
+        println(bytes.toHex)
+        val keys = Dualshock.codec.decode(bytes).toEither.map(_.value.keys).toOption.get // todo: fails for bluetooth
+        val l2 = keys.l2.analog.value.toInt
+        val r2 = keys.r2.analog.value.toInt
+        
+        println(s"Processing ended=${System.currentTimeMillis() / 1000}")
+         s"l2=$l2, r2=$r2"
+      }
+       .changes
+       .debug()
 
     input.through(loop)
   }
