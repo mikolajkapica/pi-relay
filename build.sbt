@@ -61,5 +61,5 @@ val app = project
 
 val root = project
   .in(file("."))
-  .settings(name := "pi-robot")
+  .settings(name := "pi-relay")
   .aggregate(app, hidapi)

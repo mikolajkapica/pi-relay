@@ -1,13 +1,13 @@
 { mkSbtDerivation, which, clang, hidapi, openssl, PATHS }:
 
 let
-  pname = "pi-robot";
+  pname = "pi-relay";
   buildInputs = [ which clang hidapi openssl ];
 
 in mkSbtDerivation {
   inherit pname;
   version = "0.1.0";
-  depsSha256 = "sha256-+9eyDaHzFVtsDeCYcP3tI/j4lIil9gmE++80Cx6z0Tc=";
+  depsSha256 = "sha256-o381/Ac8q4l1woTMKanQOUb1gNpYRxqpruEusAONlCw=";
   inherit buildInputs;
 
   depsWarmupCommand = ''
