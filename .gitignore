@@ -145,3 +145,6 @@ hs_err_pid*
 ### Custom
 .bsp/
 **/target/**
+flake.lock
+
+
