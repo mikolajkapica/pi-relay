@@ -55,18 +55,7 @@ val app = project
       "com.armanbilge" %%% "epollcat" % "0.1.6",
       "com.kubukoz.dualshock4s" %%% "dualshock4s" % "0.1.0",
     ),
-    nativeLinkingOptions ++= {
-      val isLinux = {
-        import sys.process.*
-        "uname".!!.trim == "Linux"
-      }
-
-      val hidapiLinkName =
-        if (isLinux) "hidapi-hidraw"
-        else "hidapi"
-
-      Seq(s"-l$hidapiLinkName")
-    },
+    nativeLinkingOptions ++=  Seq("-lhidapi-hidraw"),
   )
   .dependsOn(hidapi)
 
