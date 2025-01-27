@@ -1,0 +1,1 @@
+sbt compile app/nativeLink && sudo ./app/target/scala-3.6.3/app-out
