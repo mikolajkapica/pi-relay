@@ -1,21 +1,43 @@
 import cats.effect.*
 import cats.effect.std.Console
 import cats.implicits.*
+import com.comcast.ip4s.*
 import com.kubukoz.dualshock4s.{Dualshock, Keys}
 import com.kubukoz.hid4s.*
-import com.monovore.decline.effect.CommandIOApp
-import com.monovore.decline.{Argument, Opts}
 import fs2.{Pipe, Stream}
-import io.chrisdavenport.crossplatformioapp.CrossPlatformIOApp
+import org.http4s.*
+import org.http4s.Method.GET
+import org.http4s.dsl.io.*
+import org.http4s.ember.server.EmberServerBuilder
+import org.http4s.implicits.*
+import org.http4s.server.Server
+import org.http4s.server.websocket.WebSocketBuilder2
+import org.http4s.websocket.WebSocketFrame
 import scodec.bits.*
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.*
 import scala.util.chaining.*
 
-object Main extends CrossPlatformIOApp {
+object Main extends IOApp {
 
-  def retryExponentially[F[_]: Temporal: Console, A]: Pipe[F, A, A] = {
+  private def routes(ws: WebSocketBuilder2[IO]): HttpRoutes[IO] =
+    HttpRoutes.of[IO] { case GET -> Root / "ws" =>
+      ws.build(
+        send = processControllerInput.map(msg => WebSocketFrame.Text(msg)).repeat,
+        receive = in => in.evalMap(frameIn => IO(println(s"Received: ${frameIn.data}"))),
+      )
+    }
+
+  private val serverResource: Resource[IO, Server] =
+    EmberServerBuilder
+      .default[IO]
+      .withHost(ipv4"0.0.0.0")
+      .withPort(port"443")
+      .withHttpWebSocketApp(ws => routes(ws).orNotFound)
+      .build
+
+  private def retryExponentially[F[_] : {Temporal, Console}, A]: Pipe[F, A, A] = {
     val factor = 1.2
 
     def go(stream: Stream[F, A], attemptsRemaining: Int, currentDelay: FiniteDuration): Stream[F, A] =
@@ -36,117 +58,32 @@ object Main extends CrossPlatformIOApp {
     go(_, 10, 1.second)
   }
 
-  enum Event {
-    case Cross, Square, Triangle, Circle, R1
-
-    def toAction: Action = this match {
-      case Cross    => Action.Skip
-      case Square   => Action.Jump
-      case Triangle => Action.FastForward(20)
-      case Circle   => Action.Drop
-      case R1       => Action.Switch
-    }
-
-  }
-
-  enum Action {
-    case Skip, Jump, Drop, Switch
-    case FastForward(len: Int)
-
-    def toCommand: String = this match {
-      case Skip             => "s"
-      case Jump             => "j"
-      case FastForward(len) => s"f $len"
-      case Drop             => "d"
-      case Switch           => "w"
-    }
-
-  }
-
-  object Event {
-
-    given cats.Eq[Event] = cats.Eq.fromUniversalEquals
-
-    def fromKeys(keys: Keys): Option[Event] =
-      List(
-        keys.xoxo.cross -> Event.Cross,
-        keys.xoxo.square -> Event.Square,
-        keys.xoxo.triangle -> Event.Triangle,
-        keys.xoxo.circle -> Event.Circle,
-        keys.r1 -> Event.R1,
-        ).collectFirst {
-        case (v, event) if v.on =>
-          event
-      }
-
-  }
-
-  enum DeviceInfo(val vendorId: Int, val productId: Int) {
+  private enum DeviceInfo(val vendorId: Int, val productId: Int) {
     case Dualsense extends DeviceInfo(0x54c, 0xce6)
     case DS4 extends DeviceInfo(0x54c, 0x9cc)
   }
 
-  enum InputType {
-    case Stdin
-    case Hidapi
-  }
-
-  val devices = Map(
-    "ds4" -> DeviceInfo.DS4,
-    "dualsense" -> DeviceInfo.Dualsense,
-    )
-
-  val inputs = Map(
-    "stdin" -> InputType.Stdin,
-    "hidapi" -> InputType.Hidapi,
-    )
-
-  val stdin: Stream[cats.effect.IO, BitVector] =
-    fs2
-      .io
-      .stdin[IO](64)
-      .groupWithin(64, 1.second)
-      .map(bytes => BitVector(bytes.toByteBuffer))
-
-  def hidapi(device: DeviceInfo) = Stream
+  private def hidapi(device: DeviceInfo) = Stream
     .resource(HID.instance[IO])
     .flatMap(_.getDevice(device.vendorId, device.productId).pipe(Stream.resource).pipe(retryExponentially))
     .flatMap(_.read(64))
 
-  def run(args: List[String]): IO[ExitCode] = {
-    val opts = (
-                 Opts
-                   .option("device", "The device to look for", "d")(
-                     using Argument.fromMap("device", devices)
-                     )
-                   .withDefault(DeviceInfo.Dualsense),
-                 Opts
-                   .option("input", "The input method", "i")(
-                     using Argument.fromMap("input", inputs)
-                     )
-                   .withDefault(InputType.Hidapi),
-                 Opts
-                   .option[FiniteDuration]("rate", "The polling rate (only used with hidapi)", "r")
-                   .withDefault(100.millis),
-               ).mapN { (device, inputType, pollingRate) =>
-      val input = inputType match {
-        case InputType.Stdin  => stdin
-        case InputType.Hidapi => hidapi(device).metered(pollingRate)
-      }
+  private def processControllerInput: Stream[IO, String] = {
+    val device = DeviceInfo.DS4
+    val pollingRate = 10.millis
+    val input = hidapi(device).metered(pollingRate)
 
-      input.through(loop).compile.drain.as(ExitCode.Success)
-    }
+    val loop: fs2.Pipe[IO, BitVector, String] =
+      _.map(Dualshock.codec.decode(_))
+        .map(_.toEither.map(_.value.keys).toOption.get)
+        .map((x: Keys) => s"l2=${x.l2.analog}, r2=${x.r2.analog}")
+        .changes
+        .debug()
 
-    CommandIOApp.run[IO]("dualshock4s-cli", "Welcome to the Dualshock4s CLI")(opts, args)
+    input.through(loop)
   }
 
-  val loop: fs2.Pipe[IO, BitVector, Nothing] = _.map(Dualshock.codec.decode(_))
-                                                .map(_.toEither.map(_.value.keys).toOption.get)
-                                                .map(Event.fromKeys)
-                                                .changes
-                                                .unNone
-                                                .map(_.toAction.toCommand)
-                                                .debug()
-                                                .drain
+  def run(args: List[String]): IO[ExitCode] =
+    IO.println("Starting server") >> serverResource.useForever
 
 }
