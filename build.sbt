@@ -13,7 +13,7 @@ inThisBuild(
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
 val commonSettings = Seq(
-  scalaVersion := "3.5.2",
+  scalaVersion := "3.6.3",
   scalacOptions --= Seq("-Xfatal-warnings"),
   scalacOptions ++= Seq(
     "-Wunused:all"
