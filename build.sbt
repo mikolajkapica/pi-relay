@@ -72,4 +72,5 @@ val app = project
 
 val root = project
   .in(file("."))
+  .settings(name := "pi-robot")
   .aggregate(app, hidapi)
