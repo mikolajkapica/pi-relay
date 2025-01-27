@@ -44,7 +44,7 @@ val app = project
   .settings(
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-effect" % "3.5.2",
-      "co.fs2" %%% "fs2-io" % "3.9.3",
+      "co.fs2" %%% "fs2-io" % "3.12.0-RC1",
       "org.scodec" %%% "scodec-core" % "2.2.2",
       "org.scodec" %%% "scodec-cats" % "1.2.0",
       "org.http4s" %%% "http4s-ember-client" % http4sVersion,
