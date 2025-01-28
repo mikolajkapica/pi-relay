@@ -33,7 +33,7 @@ object Main extends IOApp {
     EmberServerBuilder
       .default[IO]
       .withHost(ipv4"0.0.0.0")
-      .withPort(port"443")
+      .withPort(port"12345")
       .withHttpWebSocketApp(ws => routes(ws).orNotFound)
       .build
 

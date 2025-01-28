@@ -3,6 +3,7 @@
   inputs.flake-utils.url = "github:numtide/flake-utils";
   inputs.sbt-derivation.url = "github:zaninime/sbt-derivation";
   inputs.sn-bindgen.url = "github:indoorvivants/sn-bindgen";
+  inputs.openssl.url = "github:NixOS/nixpkgs/nixos-21.05";
 
   outputs = { nixpkgs, flake-utils, sbt-derivation, sn-bindgen, ... }:
     flake-utils.lib.eachDefaultSystem (system:
