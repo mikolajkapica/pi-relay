@@ -1,8 +1,8 @@
-{ mkSbtDerivation, which, clang, hidapi, PATHS }:
+{ mkSbtDerivation, which, clang, hidapi, openssl, PATHS }:
 
 let
   pname = "pi-relay";
-  buildInputs = [ which clang hidapi ];
+  buildInputs = [ which clang hidapi openssl ];
 
 in mkSbtDerivation {
   inherit pname;
