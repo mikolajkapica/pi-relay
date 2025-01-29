@@ -70,28 +70,33 @@ object Main extends IOApp {
 
   private def processControllerInput: Stream[IO, String] = {
     val device = DeviceInfo.DS4
-    val pollingRate = 1.millis
+    val pollingRate = 5.millis
     val input = hidapi(device).metered(pollingRate)
 
     implicit val eqBitVector: Eq[BitVector] = Eq.fromUniversalEquals
 
-    val usb = 0x01
-    val bluetooth = 0x11
+    val usb = 1 // 0x01
+    val bluetooth = 17 // 0x11
+
+    // handle counter overflow
+    def normalize(i: Int): Int =
+      if (i < 0) { 255 + i }
+      else i
 
     val loop: fs2.Pipe[IO, BitVector, String] =
       _.map { bitVector =>
         val byteVector = bitVector.bytes
 
-        byteVector(0).toInt & 0xff match {
-          case usb if byteVector.length >= 10 =>
-            val l2 = byteVector(8).toInt & 0xff // L2 Trigger at byte 8
-            val r2 = byteVector(9).toInt & 0xff // R2 Trigger at byte 9
-            s"L2=$l2, R2=$r2"
+         byteVector(0).toInt match {
+          case `bluetooth` if byteVector.length >= 12 =>
+            val leftY = normalize(byteVector(4).toInt)
+            val rightY = normalize(byteVector(6).toInt)
+            s"$leftY $rightY"
 
-          case bluetooth if byteVector.length >= 12 =>
-            val l2 = byteVector(10).toInt & 0xff // L2 Trigger at byte 10
-            val r2 = byteVector(11).toInt & 0xff // R2 Trigger at byte 11
-            s"L2=$l2, R2=$r2"
+          case `usb` if byteVector.length >= 10 =>
+            val leftY = normalize(byteVector(2).toInt & 0xff)
+            val rightY = normalize(byteVector(4).toInt & 0xff)
+            s"$leftY $rightY"
 
           case `usb` | `bluetooth` =>
             "Error: Report is too short for the expected mode"
