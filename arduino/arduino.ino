@@ -76,7 +76,7 @@ void webSocketEvent(int type, uint8_t *payload, size_t length) {
     case WStype_TEXT:
       Serial.print("[WSc] get text:");
       Serial.println((char *)payload);
-      parseNumbers(payload, &l2, &r2);
+      parseNumbers((const char*)payload, &l2, &r2);
       break;
     case WStype_BIN:
     case WStype_ERROR:
@@ -146,5 +146,5 @@ void loop() {
   webSocket.loop();
   motor_config_forward();
   analogWrite(3, l2);
-  analogWrite(5, r2;
+  analogWrite(9, r2);
 }
