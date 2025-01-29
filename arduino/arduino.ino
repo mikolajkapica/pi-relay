@@ -66,6 +66,13 @@ public:
         digitalWrite(rightIn2, LOW);
     }
 
+    void backward() {
+        digitalWrite(leftIn2, HIGH);
+        digitalWrite(leftIn1, LOW);
+        digitalWrite(rightIn1, LOW);
+        digitalWrite(rightIn2, HIGH);
+    }
+
     void left() {
         digitalWrite(leftIn2, LOW);
         digitalWrite(leftIn1, HIGH);
@@ -80,16 +87,16 @@ public:
         digitalWrite(rightIn2, LOW);
     }
 
-    void setPower(int leftPower, int rightPower) {
-        analogWrite(leftPWM, leftPower);
-        analogWrite(rightPWM, rightPower);
+    void setPower(int left, int right) {
+        analogWrite(leftPWM, left);
+        analogWrite(rightPWM, right);
     }
 };
 
 class NetworkManager {
 private:
     WebSocketsClient webSocket;
-    void (*messageCallback)(int leftPower, int rightPower);
+    void (*messageCallback)(int left, int right);
 
 public:
     NetworkManager(void (*callback)(int, int)) {
@@ -147,9 +154,9 @@ private:
                 break;
             case WStype_TEXT: {
                 Serial.printf("[WSc] Received: %s\n", (char *)payload);
-                int l2, r2;
-                if (sscanf((char *)payload, "l2=%d, r2=%d", &l2, &r2) == 2) {
-                    messageCallback(l2, r2);
+                int left, right;
+                if (sscanf((char *)payload, "%d %d", &left, &right) == 2) {
+                    messageCallback(left, right);
                 }
                 break;
             }
@@ -165,8 +172,19 @@ MotorController motors(MOTOR_LEFT_PWM, MOTOR_RIGHT_PWM,
                       MOTOR_RIGHT_IN1, MOTOR_RIGHT_IN2);
 NetworkManager* network;
 
-void handleMotorCommand(int leftPower, int rightPower) {
-    motors.forward();  // Set direction
+void handleMotorCommand(int left, int right) {
+    if (left < 128 && right < 128) {
+        motors.backward();
+    } else if (left > 127 && right > 127) {
+        motors.forward();
+    } else if (left < 128 && right > 127) {
+        motors.left();
+    } else if (left > 127 && right < 128) {
+        motors.right();
+    }
+
+    int leftPower = abs(left - 128);
+    int rightPower = abs(right - 128);
     motors.setPower(leftPower, rightPower);
 }
 
