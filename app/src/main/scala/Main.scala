@@ -1,8 +1,8 @@
+import cats.Eq
 import cats.effect.*
 import cats.effect.std.Console
 import cats.implicits.*
 import com.comcast.ip4s.*
-import com.kubukoz.dualshock4s.Dualshock
 import com.kubukoz.hid4s.*
 import fs2.{Pipe, Stream}
 import org.http4s.*
@@ -37,7 +37,7 @@ object Main extends IOApp {
       .withHttpWebSocketApp(ws => routes(ws).orNotFound)
       .build
 
-  private def retryExponentially[F[_] : {Temporal, Console}, A]: Pipe[F, A, A] = {
+  private def retryExponentially[F[_]: {Temporal, Console}, A]: Pipe[F, A, A] = {
     val factor = 1.2
 
     def go(stream: Stream[F, A], attemptsRemaining: Int, currentDelay: FiniteDuration): Stream[F, A] =
@@ -49,8 +49,8 @@ object Main extends IOApp {
           val showRetrying = Stream.exec(
             Console[F].errorln(
               s"Device not available, retrying ${attemptsRemaining - 1} more times in $newDelay..."
-              )
             )
+          )
 
           stream.handleErrorWith(_ => showRetrying ++ go(stream, attemptsRemaining - 1, newDelay).delayBy(currentDelay))
         }
@@ -70,22 +70,38 @@ object Main extends IOApp {
 
   private def processControllerInput: Stream[IO, String] = {
     val device = DeviceInfo.DS4
-    val pollingRate = 10.millis
+    val pollingRate = 1.millis
     val input = hidapi(device).metered(pollingRate)
 
+    implicit val eqBitVector: Eq[BitVector] = Eq.fromUniversalEquals
+
+    val usb = 0x01
+    val bluetooth = 0x11
+
     val loop: fs2.Pipe[IO, BitVector, String] =
-      _.map{ bytes =>
-        println(s"Processing started=${System.currentTimeMillis() / 1000}")
-        println(bytes.toHex)
-        val keys = Dualshock.codec.decode(bytes).toEither.map(_.value.keys).toOption.get // todo: fails for bluetooth
-        val l2 = keys.l2.analog.value.toInt
-        val r2 = keys.r2.analog.value.toInt
-        
-        println(s"Processing ended=${System.currentTimeMillis() / 1000}")
-         s"l2=$l2, r2=$r2"
+      _.map { bitVector =>
+        val byteVector = bitVector.bytes
+
+        byteVector(0).toInt & 0xff match {
+          case usb if byteVector.length >= 10 =>
+            val l2 = byteVector(8).toInt & 0xff // L2 Trigger at byte 8
+            val r2 = byteVector(9).toInt & 0xff // R2 Trigger at byte 9
+            s"L2=$l2, R2=$r2"
+
+          case bluetooth if byteVector.length >= 12 =>
+            val l2 = byteVector(10).toInt & 0xff // L2 Trigger at byte 10
+            val r2 = byteVector(11).toInt & 0xff // R2 Trigger at byte 11
+            s"L2=$l2, R2=$r2"
+
+          case `usb` | `bluetooth` =>
+            "Error: Report is too short for the expected mode"
+
+          case _ =>
+            "Error: Unknown report type"
+        }
       }
-       .changes
-       .debug()
+        .changes
+        .debug()
 
     input.through(loop)
   }
