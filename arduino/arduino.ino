@@ -126,7 +126,8 @@ private:
 
         Serial.println("[Wifi]: Connecting");
         while (WiFi.status() != WL_CONNECTED) {
-            Serial.printf("[Wifi]: Attempting to connect to %s\n", WIFI_SSID);
+            Serial.print("[Wifi]: Attempting to connect to ");
+            Serial.println(WIFI_SSID);
             WiFi.begin(WIFI_SSID, WIFI_PASS);
             delay(1000);
         }
@@ -153,7 +154,8 @@ private:
                 webSocket.sendTXT("Connected");
                 break;
             case WStype_TEXT: {
-                Serial.printf("[WSc] Received: %s\n", (char *)payload);
+                Serial.print("[WSc] Received: ");
+                Serial.println((char *)payload);
                 int left, right;
                 if (sscanf((char *)payload, "%d %d", &left, &right) == 2) {
                     messageCallback(left, right);
@@ -201,3 +203,4 @@ void setup() {
 void loop() {
     network->loop();
 }
+
